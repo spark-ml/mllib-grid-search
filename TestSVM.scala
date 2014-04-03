@@ -16,7 +16,7 @@ object TestSVM {
     Logger.getLogger("org.eclipse.jetty.server").setLevel(Level.OFF)	
 
     if (args.length != 1) {
-      println("Usage: sbt/sbt package \"run libsvm-data\"")
+      println("Usage: sbt/sbt package \"run training-data\"")
       sys.exit(1)
     }
 
@@ -24,9 +24,10 @@ object TestSVM {
 
     val jarFile = "target/scala-2.10/test-svm_2.10-0.0.jar"
     val conf = new SparkConf()
-      .setMaster("local[2]")
+      .setSparkHome("/Users/meng/src/spark-mengxr")
+      .setMaster("spark://127.0.0.1:7077")
       .setAppName("TestSVM")
-      .set("spark.executor.memory", "2g")
+      .set("spark.executor.memory", "8g")
       .setJars(Seq(jarFile))
     val sc = new SparkContext(conf)
 
@@ -34,23 +35,24 @@ object TestSVM {
 
     val dataDir = args(0)
 
-    val data = loadLibSVMData(sc, dataDir).cache()
-
-    val splits = data.randomSplit(Array(0.6, 0.4), seed = 0L)
-    val training = splits(0).cache()
-    val validation = splits(1).cache()
+    val data = loadLibSVMData(sc, args(0)).cache()
+    val splits = data.randomSplit(Array(0.6, 0.2, 0.2), seed = 0L)
+    val training = splits(0).repartition(2).cache()
+    val validation = splits(1).repartition(2).cache()
+    val test = splits(2).repartition(2).cache()
 
     val numTraining = training.count()
     val numValidation = validation.count()
+    val numTest = test.count()
 
-    println("Training: " + numTraining + ", validation: " + numValidation)
+    println("Training: " + numTraining + ", validation: " + numValidation + ", test: " + numTest)
 
-    // Train models and evaluate them on the validation set
+    // train models and evaluate them on the validation set
 
-    val stepSizes = Seq(0.25, 0.5, 1.0, 2.0, 4.0)
-    val numIters = Seq(10, 20, 40, 80, 160)
-    val regParams = Seq(0.25, 0.5, 1.0, 2.0, 4.0)
-    var bestModel: Option[SVMModel] = None
+    val stepSizes = Seq(5.0, 10.0, 20.0)
+    val numIters = Seq(100)
+    val regParams = Seq(0.0, 1.0/4096.0, 1.0/2048.0)
+    var bestModel: SVMModel = null
     var bestValidationAccuracy = Double.MinValue
     var bestStepSize = -1.0
     var bestRegParam = -1.0
@@ -65,7 +67,7 @@ object TestSVM {
           |Model has accuracy of $validationAccuracy on validation.
         """.stripMargin)
       if (validationAccuracy > bestValidationAccuracy) {
-        bestModel = Some(model)
+        bestModel = model
         bestStepSize = stepSize
         bestRegParam = regParam
         bestNumIter = numIter
@@ -73,9 +75,12 @@ object TestSVM {
       }
     }
 
+    // report best model and its accuracy on test
+
+    val testAccuracy = computeAccuracy(bestModel, test, numTest)
     println(s"""
           |The best model was trained with (numIter = $bestNumIter, stepSize = $bestStepSize, regParam = $bestRegParam).
-          |The best model has accuracy of $bestValidationAccuracy on validation.
+          |The best model has accuracy of $bestValidationAccuracy on validation, $testAccuracy on test.
         """.stripMargin)
 
     sc.stop();
