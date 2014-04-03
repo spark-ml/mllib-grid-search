@@ -24,7 +24,6 @@ object TestSVM {
 
     val jarFile = "target/scala-2.10/test-svm_2.10-0.0.jar"
     val conf = new SparkConf()
-      .setSparkHome("/Users/meng/src/spark-mengxr")
       .setMaster("spark://127.0.0.1:7077")
       .setAppName("TestSVM")
       .set("spark.executor.memory", "8g")
@@ -49,9 +48,9 @@ object TestSVM {
 
     // train models and evaluate them on the validation set
 
-    val stepSizes = Seq(5.0, 10.0, 20.0)
-    val numIters = Seq(100)
-    val regParams = Seq(0.0, 1.0/4096.0, 1.0/2048.0)
+    val stepSizes = Seq(40.0, 80.0, 160.0)
+    val numIters = Seq(100, 200)
+    val regParams = Seq(1.0/8192.0, 1.0/4096.0, 1.0/2048.0)
     var bestModel: SVMModel = null
     var bestValidationAccuracy = Double.MinValue
     var bestStepSize = -1.0
